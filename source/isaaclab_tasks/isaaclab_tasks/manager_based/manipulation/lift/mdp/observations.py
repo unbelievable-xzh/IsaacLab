@@ -423,9 +423,9 @@ def model_rollout_features(
         rollout_actions = action.unsqueeze(1).repeat(1, horizon, 1)
         kf_params = torch.zeros(env.num_envs, state_dim * 3, device=current_state.device)
 
-    history = torch.roll(history, shifts=1, dims=1)
-    history[:, 0, :] = current_state
-    setattr(env, "_plan_c_state_history", history)
+    history = torch.roll(history, shifts=1, dims=1).contiguous()
+    history[:, 0, :] = current_state.detach()
+    setattr(env, "_plan_c_state_history", history.clone().detach())
     setattr(env, "_plan_c_prev_state", current_state.detach())
 
     states_flat = rollout_states.reshape(rollout_states.shape[0], -1)
