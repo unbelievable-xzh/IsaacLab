@@ -306,14 +306,18 @@ def _infer_action_tensor(env: "ManagerBasedRLEnv") -> torch.Tensor:
     """Best-effort extraction of the last applied action for each environment."""
 
     action: Optional[torch.Tensor] = None
-    if hasattr(env, "action_manager"):
-        manager = getattr(env, "action_manager")
+    manager = getattr(env, "action_manager", None)
+    if manager is not None:
         getter = getattr(manager, "get_last_actions", None)
         if callable(getter):
             try:
                 action = getter()
             except TypeError:
                 action = getter(env)  # type: ignore[misc]
+        if action is None:
+            maybe_action = getattr(manager, "action", None)
+            if isinstance(maybe_action, torch.Tensor):
+                action = maybe_action
     if action is None and hasattr(env, "_last_actions"):
         cached = getattr(env, "_last_actions")
         if isinstance(cached, torch.Tensor):
@@ -322,18 +326,17 @@ def _infer_action_tensor(env: "ManagerBasedRLEnv") -> torch.Tensor:
         num_envs = getattr(env, "num_envs", 1)
         device = getattr(env, "device", torch.device("cpu"))
         action_dim = 0
+        if manager is not None:
+            for name in ("total_action_dim", "num_actions", "action_dim", "action_size"):
+                value = getattr(manager, name, None)
+                if isinstance(value, int) and value > 0:
+                    action_dim = value
+                    break
         for name in ("num_actions", "action_dim", "action_size"):
             value = getattr(env, name, None)
             if isinstance(value, int) and value > 0:
                 action_dim = value
                 break
-        if action_dim == 0 and hasattr(env, "action_manager"):
-            manager = getattr(env, "action_manager")
-            for name in ("num_actions", "action_dim", "action_size"):
-                value = getattr(manager, name, None)
-                if isinstance(value, int) and value > 0:
-                    action_dim = value
-                    break
         if action_dim == 0:
             action_dim = 1
         action = torch.zeros(num_envs, action_dim, device=device)
